@@ -3,6 +3,11 @@ regexServeur="^[[:alnum:].:]+$"
 regexPort="^[[:digit:]]+$"
 regexNomArchive="^[[:alnum:]._-]+$"
 
+FIFO="/tmp/fifo-$$-client"
+function nettoyage() { rm -f "$FIFO"; }
+trap nettoyage EXIT
+[ -e "$FIFO" ] || mkfifo "$FIFO"
+
 if [[ 
     $# -eq 3 
     && $1 == "-list" 
@@ -10,7 +15,36 @@ if [[
     && $3 =~ $regexPort
 ]]
 then # list
-    echo $1, $2, $3, $#, list
+    serveur=$2
+    port=$3
+    echo list | netcat $serveur "$port" > "$FIFO" &
+    i=0
+    while read line
+    do
+        if [[ $i -eq 0 ]]
+        then
+            n=$line
+            if [[ $n -eq 0 ]]
+            then
+                echo "Il n'y a pas d'archive sur le serveur"
+                kill $!
+                exit -1
+            fi
+            echo Il y a $n archives sur le serveur :
+        elif [[ $i -eq $n ]]
+        then
+            echo -e "\t$line"
+            kill $!
+            exit -1
+        elif [[ -n $line ]]
+        then
+            echo -e "\t$line"
+        fi
+        ((i++))
+    done < "$FIFO"
+    # echo "heyyy" > "$FIFO"
+
+
 elif [[ 
     $# -eq 4
     && $1 == "-create"

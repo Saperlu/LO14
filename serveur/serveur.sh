@@ -24,7 +24,7 @@ trap nettoyage EXIT
 
 # on crée le tube nommé
 
-[ -e "FIFO" ] || mkfifo "$FIFO"
+[ -e "$FIFO" ] || mkfifo "$FIFO"
 
 
 function accept-loop() {
@@ -47,13 +47,13 @@ function accept-loop() {
 function interaction() {
     local cmd args
     while true; do
-    read cmd args || exit -1
-    fun="commande-$cmd"
-    if [ "$(type -t $fun)" = "function" ]; then
-        $fun $args
-    else
-        commande-non-comprise $fun $args
-    fi
+        read cmd args || exit -1
+        fun="commande-$cmd"
+        if [ "$(type -t $fun)" = "function" ]; then
+            $fun $args
+        else
+            commande-non-comprise $fun $args
+        fi
     done
 }
 
@@ -72,7 +72,12 @@ function commande-echo () {
 }
 
 function commande-list () {
-    echo "JE LISTE"
+    # Le nombre d'archives suivi des noms des archives
+    echo """4
+            archive 1
+            archive 2
+            archive 3
+            archive 4"""
 }
 
 # On accepte et traite les connexions
