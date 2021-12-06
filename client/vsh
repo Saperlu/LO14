@@ -1,0 +1,49 @@
+#!/bin/bash
+regexServeur="^[[:alnum:].:]+$"
+regexPort="^[[:digit:]]+$"
+regexNomArchive="^[[:alnum:]._-]+$"
+
+if [[ 
+    $# -eq 3 
+    && $1 == "-list" 
+    && $2 =~ $regexServeur 
+    && $3 =~ $regexPort
+]]
+then # list
+    echo $1, $2, $3, $#, list
+elif [[ 
+    $# -eq 4
+    && $1 == "-create"
+    && $2 =~ $regexServeur 
+    && $3 =~ $regexPort
+    && $4 =~ $regexNomArchive
+]]
+then # create
+    echo $1, $2, $3, $4, $#, create
+elif [[ 
+    $# -eq 4
+    && $1 == "-browse"
+    && $2 =~ $regexServeur
+    && $3 =~ $regexPort
+    && $4 =~ $regexNomArchive
+]]
+then # create
+    echo $1, $2, $3, $4, $#, browse
+elif [[ 
+    $# -eq 4
+    && $1 == "-extract"
+    && $2 =~ $regexServeur
+    && $3 =~ $regexPort
+    && $4 =~ $regexNomArchive
+]]
+then # create
+    echo $1, $2, $3, $4, $#, extract
+else
+    cat << EOF
+Usage :
+    vsh -list    nom_serveur port
+    vsh -create  nom_serveur port nom_archive
+    vsh -browse  nom_serveur port nom_archive
+    vsh -extract nom_serveur port nom_archive
+EOF
+fi
