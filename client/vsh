@@ -42,9 +42,6 @@ then # list
         fi
         ((i++))
     done < "$FIFO"
-    # echo "heyyy" > "$FIFO"
-
-
 elif [[ 
     $# -eq 4
     && $1 == "-create"
@@ -53,7 +50,29 @@ elif [[
     && $4 =~ $regexNomArchive
 ]]
 then # create
-    echo $1, $2, $3, $4, $#, create
+    zip=$(tar -cz * | base64)
+    serveur=$2
+    port=$3
+    archive=$4
+    echo "create $4 $zip" | netcat $serveur "$port" > "$FIFO" &
+    i=0
+    while read line
+    do
+        if [[ $i -eq 0 ]]
+        then
+            n=$line
+        elif [[ -n $line ]]
+        then
+            echo -e "$line"
+        fi
+
+        if [[ $i -eq $n ]]
+        then
+            kill $!
+            exit -1
+        fi
+        ((i++))
+    done < "$FIFO"
 elif [[ 
     $# -eq 4
     && $1 == "-browse"

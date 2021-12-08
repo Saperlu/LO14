@@ -79,6 +79,19 @@ function commande-list () {
             archive 3
             archive 4"""
 }
+function commande-create () {
+    nom=$1
+    archive=$2
+    dossier="/tmp/dossier-$USER-$$-$nom"
+    mkdir "$dossier"
+    echo $archive | base64 -d | tar -xz -C "$dossier"
+
+    # Tout se trouve dans le dossier $dossier
+
+    rm -rf "$dossier"
+    echo """1
+            L'archive $nom a bien été créée"""
+}
 
 # On accepte et traite les connexions
 
