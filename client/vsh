@@ -8,89 +8,348 @@ function nettoyage() { rm -f "$FIFO"; }
 trap nettoyage EXIT
 [ -e "$FIFO" ] || mkfifo "$FIFO"
 
+function list () {
+    serveur=$1
+    port=$2
+    echo list | netcat "$serveur" "$port" > "$FIFO" &
+    i=0
+    while :
+    do
+        while read -r line
+        do
+            if [[ $i -eq 0 ]]
+            then
+                n=$line
+                if [[ $n -eq 0 ]]
+                then
+                    echo "Il n'y a pas d'archive sur le serveur"
+                fi
+                echo "Il y a $n archives sur le serveur :"
+            elif [[ -n $line ]]
+            then
+                echo -e "\t$line"
+            fi
+            if [[ $i -eq $n ]]
+            then
+                kill $!
+                exit 0
+            fi
+            ((i++))
+        done < "$FIFO"
+    done
+}
+
+function create () {
+    zip=$(tar -cz ./* | base64)
+    serveur=$1
+    port=$2
+    archive=$3
+    echo "create $archive $zip" | netcat "$serveur" "$port" > "$FIFO" &
+    i=0
+    while :
+    do
+        while read -r line
+        do
+            if [[ $i -eq 0 ]]
+            then
+                n=$line
+            elif [[ -n $line ]]
+            then
+                echo -e "$line"
+            fi
+
+            if [[ $i -eq $n ]]
+            then
+                kill $!
+                exit 0
+            fi
+            ((i++))
+        done < "$FIFO"
+    done
+}
+
+function browse-ls () {
+    serveur=$1
+    port=$2
+    archive=$3
+    currentDir=$4
+
+    echo "browse ls arch" | netcat "$serveur" "$port" > "$FIFO" &
+    i=0
+    n=1
+    while [ $i -ne $n ]
+    do
+        while read -r line
+        do
+            if [[ $i -eq 0 ]]
+            then
+                n=$line
+            elif [[ -n $line ]]
+            then
+                echo -e "$line"
+            else
+                echo rien
+            fi
+            if [[ $i -eq $n ]]
+            then
+                kill $!
+                break
+            fi
+            ((i++))
+        done < "$FIFO"
+    done
+}
+
+function browse-cd () {
+    serveur=$1
+    port=$2
+    archive=$3
+    # currentDir=$4
+    dossier=$5
+    
+    echo "browse cd $archive $currentDir $dossier" | netcat "$serveur" "$port" > "$FIFO" &
+    i=0
+    n=1
+    while [ $i -ne $n ]
+    do
+        while read -r line
+        do
+            if [[ $i -eq 0 ]]
+            then
+                n=$line
+            elif [[ $i -eq 1 ]] # Spécifique au cd
+            then
+                # On remplace les / par des \\ dans la string currentDir
+                currentDir=$(echo "$line" | sed 's/\//\\\\/g')
+            fi
+            if [[ $i -eq $n ]]
+            then
+                kill $!
+                break
+            fi
+            ((i++))
+        done < "$FIFO"
+    done
+
+}
+
+function browse-cat () {
+    serveur=$1
+    port=$2
+    archive=$3
+    currentDir=$4
+    fichier=$5
+    
+    echo "browse cd $archive $currentDir $fichier" | netcat "$serveur" "$port" > "$FIFO" &
+    i=0
+    n=1
+    while [ $i -ne $n ]
+    do
+        while read -r line
+        do
+            if [[ $i -eq 0 ]]
+            then
+                n=$line
+            elif [[ -n $line ]]
+            then
+                echo -e "$line"
+            else
+                echo rien
+            fi
+            if [[ $i -eq $n ]]
+            then
+                kill $!
+                break
+            fi
+            ((i++))
+        done < "$FIFO"
+    done
+}
+
+function browse-rm () {
+    serveur=$1
+    port=$2
+    archive=$3
+    currentDir=$4
+    fichier=$5
+    
+    echo "browse cd $archive $currentDir $fichier" | netcat "$serveur" "$port" > "$FIFO" &
+    i=0
+    n=1
+    while [ $i -ne $n ]
+    do
+        while read -r line
+        do
+            if [[ $i -eq 0 ]]
+            then
+                n=$line
+            elif [[ -n $line ]]
+            then
+                echo -e "$line"
+            else
+                echo rien
+            fi
+            if [[ $i -eq $n ]]
+            then
+                kill $!
+                break
+            fi
+            ((i++))
+        done < "$FIFO"
+    done
+}
+
+function browse-touch () {
+    serveur=$1
+    port=$2
+    archive=$3
+    currentDir=$4
+    fichier=$5
+    
+    echo "browse cd $archive $currentDir $fichier" | netcat "$serveur" "$port" > "$FIFO" &
+    i=0
+    n=1
+    while [ $i -ne $n ]
+    do
+        while read -r line
+        do
+            if [[ $i -eq 0 ]]
+            then
+                n=$line
+            elif [[ -n $line ]]
+            then
+                echo -e "$line"
+            else
+                echo rien
+            fi
+            if [[ $i -eq $n ]]
+            then
+                kill $!
+                break
+            fi
+            ((i++))
+        done < "$FIFO"
+    done
+}
+
+function browse-mkdir () {
+    serveur=$1
+    port=$2
+    archive=$3
+    currentDir=$4
+    dossier=$5
+    
+    echo "browse cd $archive $currentDir $dossier" | netcat "$serveur" "$port" > "$FIFO" &
+    i=0
+    n=1
+    while [ $i -ne $n ]
+    do
+        while read -r line
+        do
+            if [[ $i -eq 0 ]]
+            then
+                n=$line
+            elif [[ -n $line ]]
+            then
+                echo -e "$line"
+            else
+                echo rien
+            fi
+            if [[ $i -eq $n ]]
+            then
+                kill $!
+                break
+            fi
+            ((i++))
+        done < "$FIFO"
+    done
+}
+
 if [[ 
     $# -eq 3 
-    && $1 == "-list" 
-    && $2 =~ $regexServeur 
-    && $3 =~ $regexPort
+    && "$1" == "-list" 
+    && "$2" =~ $regexServeur 
+    && "$3" =~ $regexPort
 ]]
 then # list
-    serveur=$2
-    port=$3
-    echo list | netcat $serveur "$port" > "$FIFO" &
-    i=0
-    while read line
-    do
-        if [[ $i -eq 0 ]]
-        then
-            n=$line
-            if [[ $n -eq 0 ]]
-            then
-                echo "Il n'y a pas d'archive sur le serveur"
-                kill $!
-                exit -1
-            fi
-            echo Il y a $n archives sur le serveur :
-        elif [[ $i -eq $n ]]
-        then
-            echo -e "\t$line"
-            kill $!
-            exit -1
-        elif [[ -n $line ]]
-        then
-            echo -e "\t$line"
-        fi
-        ((i++))
-    done < "$FIFO"
+    list "$2" "$3" "$4" 2>/dev/null
 elif [[ 
     $# -eq 4
-    && $1 == "-create"
-    && $2 =~ $regexServeur 
-    && $3 =~ $regexPort
-    && $4 =~ $regexNomArchive
+    && "$1" == "-create"
+    && "$2" =~ $regexServeur 
+    && "$3" =~ $regexPort
+    && "$4" =~ $regexNomArchive
 ]]
 then # create
-    zip=$(tar -cz * | base64)
+    create "$2" "$3" "$4" 2>/dev/null
+elif [[ 
+    $# -eq 4
+    && "$1" == "-browse"
+    && "$2" =~ $regexServeur
+    && "$3" =~ $regexPort
+    && "$4" =~ $regexNomArchive
+]]
+then # browse
     serveur=$2
     port=$3
     archive=$4
-    echo "create $4 $zip" | netcat $serveur "$port" > "$FIFO" &
-    i=0
-    while read line
+    currentDir="\\"
+    regexFichier="[[:alnum:]\\-_.]+"
+    printf "vsh: $archive < $currentDir > "
+    read -r line
+    while [[ $line != "exit" ]]
     do
-        if [[ $i -eq 0 ]]
+        if [[ $line == "pwd" ]]
         then
-            n=$line
-        elif [[ -n $line ]]
+            echo $currentDir
+        elif [[ $line == "ls" ]]
         then
-            echo -e "$line"
-        fi
+            browse-ls "$2" "$3" "$4" "$currentDir" 2>/dev/null
+        elif [[ $line =~ ^cd\ $regexFichier$ ]]
+        then
+            dossier=$(echo "$line" | sed 's/cd //g')
+            browse-cd "$2" "$3" "$4" "$currentDir" "$dossier" 2>/dev/null
 
-        if [[ $i -eq $n ]]
+        elif [[ $line =~ ^cat\ $regexFichier$ ]]
         then
-            kill $!
-            exit -1
+            fichier=$(echo "$line" | sed 's/cat //g')
+            browse-cat "$2" "$3" "$4" "$currentDir" "$fichier" 2>/dev/null
+        elif [[ $line =~ ^rm\ $regexFichier$ ]]
+        then
+            fichier=$(echo "$line" | sed 's/rm //g')
+            browse-rm "$2" "$3" "$4" "$currentDir" "$fichier" 2>/dev/null
+        elif [[ $line =~ ^touch\ $regexFichier$ ]]
+        then
+            fichier=$(echo "$line" | sed 's/touch //g')
+            browse-touch "$2" "$3" "$4" "$currentDir" "$fichier" 2>/dev/null
+        elif [[ $line =~ ^mkdir\ $regexFichier$ ]]
+        then
+            dossier=$(echo "$line" | sed 's/mkdir //g')
+            browse-mkdir "$2" "$3" "$4" "$currentDir" "$dossier" 2>/dev/null
+        else
+            printf "Usage :
+\tpwd
+\tls
+\tcd dossier
+\tcat fichier
+\trm fichier
+\ttouch fichier
+\tmkdir dossier
+"
         fi
-        ((i++))
-    done < "$FIFO"
+        printf "vsh: $archive < $currentDir > "
+        read -r line
+    done
+
 elif [[ 
     $# -eq 4
-    && $1 == "-browse"
-    && $2 =~ $regexServeur
-    && $3 =~ $regexPort
-    && $4 =~ $regexNomArchive
+    && "$1" == "-extract"
+    && "$2" =~ $regexServeur
+    && "$3" =~ $regexPort
+    && "$4" =~ $regexNomArchive
 ]]
-then # create
-    echo $1, $2, $3, $4, $#, browse
-elif [[ 
-    $# -eq 4
-    && $1 == "-extract"
-    && $2 =~ $regexServeur
-    && $3 =~ $regexPort
-    && $4 =~ $regexNomArchive
-]]
-then # create
-    echo $1, $2, $3, $4, $#, extract
+then # extract
+    echo "$1", "$2", "$3", "$4", $#, extract
 else
     cat << EOF
 Usage :
@@ -100,3 +359,4 @@ Usage :
     vsh -extract nom_serveur port nom_archive
 EOF
 fi
+

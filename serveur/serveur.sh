@@ -47,7 +47,7 @@ function accept-loop() {
 function interaction() {
     local cmd args
     while true; do
-        read cmd args || exit -1
+        read -r cmd args || exit -1
         fun="commande-$cmd"
         if [ "$(type -t $fun)" = "function" ]; then
             $fun $args
@@ -73,11 +73,11 @@ function commande-echo () {
 
 function commande-list () {
     # Le nombre d'archives suivi des noms des archives
-    echo """4
+    echo "4
             archive 1
             archive 2
             archive 3
-            archive 4"""
+            archive 4"
 }
 function commande-create () {
     nom=$1
@@ -89,9 +89,61 @@ function commande-create () {
     # Tout se trouve dans le dossier $dossier
 
     rm -rf "$dossier"
-    echo """1
-            L'archive $nom a bien été créée"""
+    echo "1
+            L'archive $nom a bien été créée"
 }
+
+function commande-browse () {
+    if [ "$(type -t $fun-$1)" = "function" ]; then
+        $fun-$1 $args
+    else
+        commande-non-comprise $fun $args
+    fi
+}
+
+function commande-browse-ls () {
+    echo "2
+            fichier -rwxrw-rw-
+            dossier drwxrwxrw-"
+}
+
+function commande-browse-cd () {
+    archive=$2
+    currentDir=$3
+    dossier=$4
+    # ici, il faut renvoyer le chemin absolu du nouveau répertoire de travail avec des / comme séparateur de dossier
+    echo "1
+            /$RANDOM"
+}
+function commande-browse-cat () {
+    archive=$2
+    currentDir=$3
+    fichier=$4
+    echo "1
+            contenu du fichier"
+}
+function commande-browse-rm () {
+    archive=$2
+    currentDir=$3
+    fichier=$4
+    echo "1
+            $2> $3 $4"
+}
+function commande-browse-touch () {
+    archive=$2
+    currentDir=$3
+    fichier=$4
+    echo "1
+            $2> $3 $4"
+}
+function commande-browse-mkdir () {
+    archive=$2
+    currentDir=$3
+    dossier=$4
+    echo "1
+            $2> $3 $4"
+}
+
 
 # On accepte et traite les connexions
 
