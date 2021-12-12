@@ -13,23 +13,27 @@ PORT="$1"
 
 # Déclaration du tube
 
-FIFO="/tmp/$USER-fifo-$$"
+FIFO="/tmp/$USER-fifo-$$-serveur"
+logger="/tmp/$USER-f-$$-serveur"
+
 
 # Il faut détruire le tube quand le serveur termine pour éviter de
 # polluer /tmp.  On utilise pour cela une instruction trap pour être sur de
 # nettoyer même si le serveur est interrompu par un signal.
 
-function nettoyage() { rm -f "$FIFO"; }
+function nettoyage() { rm -f "$FIFO" "$logger"; }
 trap nettoyage EXIT
 
 # on crée le tube nommé
 
 [ -e "$FIFO" ] || mkfifo "$FIFO"
+[ -e "$logger" ] || mkfifo "$logger"
 
 
 function accept-loop() {
     while true; do
-    interaction < "$FIFO" | netcat -l -p "$PORT" > "$FIFO"
+    interaction < "$FIFO" | netcat -l -p "$PORT" > "$FIFO" 2>/dev/null
+    cat "$logger"
     done
 }
 
@@ -48,6 +52,7 @@ function interaction() {
     local cmd args
     while true; do
         read -r cmd args || exit -1
+        echo "$cmd $args" > "$logger" &
         fun="commande-$cmd"
         if [ "$(type -t $fun)" = "function" ]; then
             $fun $args
@@ -171,6 +176,7 @@ function commande-browse-cd () {
     currentDir=$3
     dossier=$4
     # ici, il faut renvoyer le chemin absolu du nouveau répertoire de travail avec des / comme séparateur de dossier
+    # chemin absolu = chemin relatif à la racine de l'archive
     echo "1
             /$RANDOM"
 }
