@@ -1,8 +1,8 @@
 #! /bin/bash
 
-# Ce script implémente un serveur.  
-# Le script doit être invoqué avec l'argument :                                                              
-# PORT   le port sur lequel le serveur attend ses clients  
+# Ce script implémente un serveur.
+# Le script doit être invoqué avec l'argument :
+# PORT   le port sur lequel le serveur attend ses clients
 
 if [ $# -ne 1 ]; then
     echo "usage: $(basename $0) PORT"
@@ -33,16 +33,16 @@ function accept-loop() {
     done
 }
 
-# La fonction interaction lit les commandes du client sur entrée standard 
-# et envoie les réponses sur sa sortie standard. 
+# La fonction interaction lit les commandes du client sur entrée standard
+# et envoie les réponses sur sa sortie standard.
 #
-# 	CMD arg1 arg2 ... argn                   
-#                     
+# 	CMD arg1 arg2 ... argn
+#
 # alors elle invoque la fonction :
-#                                                                            
-#         commande-CMD arg1 arg2 ... argn                                      
-#                                                                              
-# si elle existe; sinon elle envoie une réponse d'erreur.                     
+#
+#         commande-CMD arg1 arg2 ... argn
+#
+# si elle existe; sinon elle envoie une réponse d'erreur.
 
 function interaction() {
     local cmd args
@@ -73,11 +73,30 @@ function commande-echo () {
 
 function commande-list () {
     # Le nombre d'archives suivi des noms des archives
-    echo "4
-            archive 1
-            archive 2
-            archive 3
-            archive 4"
+    # Récupérer les noms différentes archives
+    i=0
+    while read line
+    do
+      while find -name "tar"
+      do
+        array [ $i ]="$line"
+        ((i++))
+      done < <(ls -ls)
+    done
+    # Afficher le nombre d'archives et le tableau avec le nom des archives
+    j=0
+    echo "Il y a $i archives."
+    while !j=i
+    do
+      echo "Archive $i : "
+      echo "${array[i]}"
+      ((i++))
+    done
+    #echo "4
+    #        archive 1
+    #        archive 2
+    #        archive 3
+    #        archive 4"
 }
 function commande-create () {
     nom=$1
