@@ -64,7 +64,9 @@ function interaction() {
 
 # Les fonctions implémentant les différentes commandes du serveur
 
-
+function wcl () {
+    wc -l "$1" | egrep -o '[0-9]+' | head -n 1
+}
 function commande-non-comprise () {
     echo "Le serveur ne peut pas interpréter cette commande"
 }
@@ -79,29 +81,13 @@ function commande-echo () {
 function commande-list () {
     # Le nombre d'archives suivi des noms des archives
     # Récupérer les noms différentes archives
-    i=0
-    while read line
-    do
-      while find -name "tar"
-      do
-        array [ $i ]="$line"
-        ((i++))
-      done < <(ls -ls)
-    done
+    find . -name "*.archive.txt" -d 1 -exec echo "{}" >> find.txt \;
     # Afficher le nombre d'archives et le tableau avec le nom des archives
-    j=0
-    echo "Il y a $i archives."
-    while !j=i
-    do
-      echo "Archive $i : "
-      echo "${array[i]}"
-      ((i++))
-    done
-    #echo "4
-    #        archive 1
-    #        archive 2
-    #        archive 3
-    #        archive 4"
+    local length=$(wcl find.txt)
+    echo "$(((length+1)))"
+    echo "Il y a $length archives."
+    sed "s:./\(.*\).archive.txt$:\1:g" find.txt
+    rm find.txt
 }
 function commande-create () {
     nom=$1
@@ -119,11 +105,13 @@ function commande-create () {
     #On laisse une ligne en haut pour noter le début du header et du body
     echo -e "\n" >> header.txt
     curseur_body=0
+
+    # On recherche tous les dossiers de l'arborescence pour lister leur contenu
     find "$dossier" -type d | while read absolute
     do
         relative=$(printf "%s" $absolute | sed s:^$dossier::)
         echo "directory $relative" >> header.txt
-
+        # On boucle sur le contenu du dossier pour afficher les informations de chaque fichier/dossier
         ls -l "$absolute" | sed /^total/d | while read rights _ _ _ size _ _ _ name
         do
             export toprint="$name $rights"
@@ -132,7 +120,7 @@ function commande-create () {
                 export toprint="$toprint $size"
                 if [[ -f "$absolute/$name" ]]
                 then
-                    export toprint="$toprint $((($(wc -l body.txt | egrep -o '[0-9]+' | head -n 1)+1))) $(wc -l $absolute/$name | egrep -o '[0-9]+' | head -n 1)"
+                    export toprint="$toprint $((($(wcl body.txt)+1))) $(wcl $absolute/$name)"
                     cat "$absolute/$name" >> body.txt
                 fi
             fi
@@ -162,14 +150,14 @@ function commande-create () {
     #   echo -e "@\n" >> header.txt
     # done
 
-    taille_header=$(wc -l header.txt | egrep -o "[0-9]+")
+    taille_header=$(wcl header.txt)
     #Ajouter au début du fichier header
     # sed -i 1s/.*/`((taille_header+2))`\n/g "header.txt"
     echo "3:$(((taille_header+2)))" | cat - header.txt > temp 
     mv temp header.txt
 
     #Concaténer header et body
-    cat header.txt body.txt > $nom.txt
+    cat header.txt body.txt > $nom.archive.txt
     rm body.txt
     rm header.txt
 
