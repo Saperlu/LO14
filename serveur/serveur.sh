@@ -33,7 +33,7 @@ trap nettoyage EXIT
 function accept-loop() {
     while true; do
     interaction < "$FIFO" | netcat -l -p "$PORT" > "$FIFO" 2>/dev/null
-    cat "$logger"
+    cat "$logger" | cut -c1-60
     done
 }
 
@@ -113,43 +113,65 @@ function commande-create () {
 
 
     #Deux fichiers qu'on va concaténer à la fin
-    vi header.txt
-    vi body.txt
+    touch header.txt
+    touch body.txt
 
-    #On laisse deux lignes en haut pour noter le début du header et du body
-    echo -e "\n\n" >> header.txt
+    #On laisse une ligne en haut pour noter le début du header et du body
+    echo -e "\n" >> header.txt
     curseur_body=0
-    #On cherche les directory
-    for i in $(ls)
+    find "$dossier" -type d | while read absolute
     do
-      if [ -d $i ]; then
-        ((d++))
-        #Mettre le nom du dossier dans le fichiers
-        echo -e "directory $(ls)\n" >> header.txt
-        nb_lignes=wc($(ls))
-        #Ecrire ce qu'il y a dans le fichier dans l'archive
-        cat body.txt ($(ls)).txt > body.txt
-        taille=$(ls -l $i | cut -d' ' -f5)
-        echo -e "\n\n" >> body.txt
-        #Mettre les dossiers et fichiers en-dessous avec nom, droit, poids et début et fin
-        echo -e "$(ls -a) $(ls -l) $taille $curseur_body (($curseur_body+$nb_lignes))" >> header.txt
-        nb_lignes=(($nb_lignes+1))
-        curseur_body=(($curseur_body+$nb_lignes))
-      fi
-      #Mettre un @ pour dire qu'on change de dossier
-      echo -e "@\n" >> header.txt
+        relative=$(printf "%s" $absolute | sed s:^$dossier::)
+        echo "directory $relative" >> header.txt
+
+        ls -l "$absolute" | sed /^total/d | while read rights _ _ _ size _ _ _ name
+        do
+            export toprint="$name $rights"
+            if [[ "$size" != "0" ]]
+            then
+                export toprint="$toprint $size"
+                if [[ -f "$absolute/$name" ]]
+                then
+                    export toprint="$toprint $((($(wc -l body.txt | egrep -o '[0-9]+' | head -n 1)+1))) $(wc -l $absolute/$name | egrep -o '[0-9]+' | head -n 1)"
+                    cat "$absolute/$name" >> body.txt
+                fi
+            fi
+            echo $toprint
+        done >> header.txt
+        echo "@" >> header.txt
     done
 
-    #Mettre #!\bin\bash pour dire qu'on a fini le header
-    echo -e "#!\bin\bash\n\n" >> header.txt
+    #On cherche les directory
+    # for i in $(ls)
+    # do
+    #   if [ -d $i ]; then
+    #     ((d++))
+    #     #Mettre le nom du dossier dans le fichiers
+    #     echo -e "directory $(ls)\n" >> header.txt
+    #     nb_lignes=$(wc -l $(ls))
+    #     #Ecrire ce qu'il y a dans le fichier dans l'archive
+    #     #cat body.txt ($(ls)).txt > body.txt
+    #     taille=$(ls -l $i | cut -d' ' -f5)
+    #     echo -e "\n\n" >> body.txt
+    #     #Mettre les dossiers et fichiers en-dessous avec nom, droit, poids et début et fin
+    #     echo -e "$(ls -a) $(ls -l) $taille $curseur_body (($curseur_body+$nb_lignes))" >> header.txt
+    #     (($nb_lignes+=1))
+    #     (($curseur_body+=$nb_lignes))
+    #   fi
+    #   #Mettre un @ pour dire qu'on change de dossier
+    #   echo -e "@\n" >> header.txt
+    # done
 
-
-    taille_header=wc -l(header.txt)
+    taille_header=$(wc -l header.txt | egrep -o "[0-9]+")
     #Ajouter au début du fichier header
-    sed -i "1i3:$((taille_header+2))\n\n" header.txt
+    # sed -i 1s/.*/`((taille_header+2))`\n/g "header.txt"
+    echo "3:$(((taille_header+2)))" | cat - header.txt > temp 
+    mv temp header.txt
 
     #Concaténer header et body
     cat header.txt body.txt > $nom.txt
+    rm body.txt
+    rm header.txt
 
 
     rm -rf "$dossier"
