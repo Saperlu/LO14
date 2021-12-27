@@ -18,8 +18,7 @@ function printResult () {
             if [[ $i -eq 0 ]]
             then
                 n=$line
-            elif [[ -n $line ]]
-            then
+            else
                 echo -e "$line"
             fi
             if [[ $i -eq $n ]]
@@ -155,6 +154,67 @@ function browse-mkdir () {
     printResult
 }
 
+function extract () {
+    serveur=$1
+    port=$2
+    archive=$3
+    echo "extract $archive" | netcat "$serveur" "$port" > "$FIFO" &
+    file="archive.txt"
+    printResult > "$file"
+
+    if [[ !($(head -n 1 "$file") =~ ^[0-9]+:[0-9]+$) ]]
+    then
+        cat "$file"
+        rm "$file"
+        exit 0
+    fi
+
+    # On crée les fichiers header.txt et body.txt
+    read line < "$file"
+    beginHeader=$(echo $line | cut -d: -f1)
+    beginBody=$(echo $line | cut -d: -f2)
+    head -n $((beginBody-1)) "$file" | tail -n $((beginBody-beginHeader-1)) | sed 's/\\/\//g' > header.txt
+    awk "NR>=$beginBody { print \$0 >> \"body.txt\" }" $file
+
+    isInsideDirectory="false"
+    directory=''
+    while read line
+    do
+        if [[ $isInsideDirectory == "false" && "$line" =~ ^directory ]]
+        then
+            [[ $line != "directory" ]] && directory=$(echo $line | cut -d' ' -f2)
+            isInsideDirectory="true"
+            absolute="$PWD/$directory"
+            absolute=${absolute//"//"/"/"}
+            if [[ ! -d "$absolute" ]]
+            then
+                mkdir "$absolute"
+                chmod u=$(echo $rights | cut -c2-4 | sed s/-//g),g=$(echo $rights | cut -c5-7 | sed s/-//g),o=$(echo $rights | cut -c8-10 | sed s/-//g) "$absolute"
+            fi
+        elif [[ $isInsideDirectory == "true" && "$line" == "@" ]]
+        then
+            directory=''
+            isInsideDirectory="false"
+        else
+            read name rights size begin lines <<< $line
+            absolute="$PWD/$directory/$name"
+            absolute=${absolute//"//"/"/"}
+            if [[ !($rights =~ ^d) ]]
+            then
+                touch "$absolute"
+                if [[ -n $size ]]
+                then
+                    head -n $((begin+lines-1)) "body.txt" | tail -n "$lines" > "$absolute"
+                fi
+                chmod u=$(echo $rights | cut -c2-4 | sed s/-//g),g=$(echo $rights | cut -c5-7 | sed s/-//g),o=$(echo $rights | cut -c8-10 | sed s/-//g) "$absolute"
+            fi
+        fi
+    done < header.txt
+    rm body.txt header.txt $file
+    echo "L'archive a été restaurée dans le répertoire courant."
+    exit 0
+}
+
 if [[ 
     $# -eq 3 
     && "$1" == "-list" 
@@ -217,17 +277,10 @@ then # browse
             dossier=$(echo "$line" | sed 's/mkdir //g')
             browse-mkdir "$2" "$3" "$4" "$currentDir" "$dossier" 2>/dev/null
         else
-            printf "Usage :
-\tpwd
-\tls
-\tcd dossier
-\tcat fichier
-\trm fichier
-\ttouch fichier
-\tmkdir dossier
-"
+            # prints correct usage
+            printf "Usage :\n\tpwd\n\tls\n\tcd dossier\n\tcat fichier\n\trm fichier\n\ttouch fichier\n\tmkdir dossier\n"
         fi
-    printf "vsh: %s < \e[31m%s\e[0m > " "$archive" "$currentDir"
+        printf "vsh: %s < \e[31m%s\e[0m > " "$archive" "$currentDir"
         read -r line
     done
 
@@ -239,7 +292,7 @@ elif [[
     && "$4" =~ $regexNomArchive
 ]]
 then # extract
-    echo "$1", "$2", "$3", "$4", $#, extract
+    extract "$2" "$3" "$4"
 else
     cat << EOF
 Usage :

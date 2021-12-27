@@ -157,6 +157,7 @@ function commande-create () {
     mv temp header.txt
 
     #Concaténer header et body
+    sed -i '' 's/\//\\/g' header.txt
     cat header.txt body.txt > $nom.archive.txt
     rm body.txt
     rm header.txt
@@ -217,6 +218,19 @@ function commande-browse-mkdir () {
     dossier=$4
     echo "1
             $2> $3 $4"
+}
+
+function commande-extract () {
+    archive=$1
+    fichier="./$1.archive.txt"
+    if [[ ! -e "$fichier" ]]
+    then
+        echo "1
+        Erreur : l'archive n'existe pas"
+        exit 0
+    fi
+    echo $(wcl "$fichier")
+    cat "$fichier"
 }
 
 
