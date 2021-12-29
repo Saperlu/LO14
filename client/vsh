@@ -3,6 +3,9 @@ regexServeur="^[[:alnum:].:]+$"
 regexPort="^[[:digit:]]+$"
 regexNomArchive="^[[:alnum:]._-]+$"
 
+__colorRed="\e[31m"
+__colorEnd="\e[0m"
+
 FIFO="/tmp/fifo-$$-client"
 function nettoyage() { rm -f "$FIFO"; }
 trap nettoyage EXIT
@@ -73,40 +76,35 @@ function browse-ls () {
     port=$2
     archive=$3
     currentDir=$4
-    echo "browse ls arch" | netcat "$serveur" "$port" > "$FIFO" &
-    printResult
+    echo "browse ls $archive $currentDir" | netcat "$serveur" "$port" > "$FIFO" &
+    printResult | while read line
+    do
+        read rights name size <<< "$line"
+        if [[ "$rights" =~ ^d ]]
+        then
+            printf "%s $__colorRed%s$__colorEnd %s\n" "$rights" "$name" "$size"
+        else
+            echo "$line"
+        fi
+    done
 }
 
 function browse-cd () {
     serveur=$1
     port=$2
     archive=$3
-    # currentDir=$4
-    dossier=$5
+    currentDir=$4
+    destDir=$5
     
-    echo "browse cd $archive $currentDir $dossier" | netcat "$serveur" "$port" > "$FIFO" &
-    i=0
-    n=1
-    while [ $i -ne $n ]
-    do
-        while read -r line
-        do
-            if [[ $i -eq 0 ]]
-            then
-                n=$line
-            elif [[ $i -eq 1 ]] # Spécifique au cd
-            then
-                # On remplace les / par des \\ dans la string currentDir
-                currentDir=$(echo "$line" | sed 's/\//\\/g')
-            fi
-            if [[ $i -eq $n ]]
-            then
-                kill $!
-                break
-            fi
-            ((i++))
-        done < "$FIFO"
-    done
+    echo "browse cd $archive $currentDir $destDir" | netcat "$serveur" "$port" > "$FIFO" &
+    local result=$(printResult)
+    if [[ "$result" =~ ^\\ ]]
+    then
+        currentDir="$result"
+        echo $currentDir
+    else
+        echo "$result"
+    fi
 
 }
 
@@ -245,7 +243,15 @@ then # browse
     archive=$4
     currentDir="\\"
     regexFichier="[[:alnum:]\\-_.]+"
-    printf "vsh: %s < \e[31m%s\e[0m > " "$archive" "$currentDir"
+
+    # Vérifie que l'archive existe
+    if [[ ! $(list $serveur $port 2>/dev/null | egrep ^$archive$ ) ]]
+    then
+        echo "Erreur : l'archive n'existe pas"
+        exit 0
+    fi
+
+    printf "vsh: %s < $__colorRed%s$__colorEnd > " "$archive" "$currentDir"
     read -r line
     while [[ $line != "exit" ]]
     do
@@ -280,7 +286,7 @@ then # browse
             # prints correct usage
             printf "Usage :\n\tpwd\n\tls\n\tcd dossier\n\tcat fichier\n\trm fichier\n\ttouch fichier\n\tmkdir dossier\n"
         fi
-        printf "vsh: %s < \e[31m%s\e[0m > " "$archive" "$currentDir"
+        printf "vsh: %s < $__colorRed%s$__colorEnd > " "$archive" "$currentDir"
         read -r line
     done
 
