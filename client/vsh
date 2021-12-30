@@ -12,6 +12,7 @@ trap nettoyage EXIT
 [ -e "$FIFO" ] || mkfifo "$FIFO"
 
 function printResult () {
+    #1
     i=0
     n=1
     while [[ $i -ne $n ]]
@@ -266,10 +267,10 @@ then # browse
             dossier=$(echo "$line" | sed 's/cd //g')
             browse-cd "$2" "$3" "$4" "$currentDir" "$dossier" 2>/dev/null
 
-        elif [[ $line =~ ^cat\ $regexFichier$ ]]
+        elif [[ $line =~ ^cat(\ $regexFichier)+$ ]]
         then
-            fichier=$(echo "$line" | sed 's/cat //g')
-            browse-cat "$2" "$3" "$4" "$currentDir" "$fichier" 2>/dev/null
+            fichiers=$(echo "$line" | sed 's/cat //g')
+            browse-cat "$2" "$3" "$4" "$currentDir" "$fichiers" 2>/dev/null
         elif [[ $line =~ ^rm\ $regexFichier$ ]]
         then
             fichier=$(echo "$line" | sed 's/rm //g')

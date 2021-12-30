@@ -139,7 +139,6 @@ function commande-list () {
     # Le nombre d'archives suivi des noms des archives
     # Récupérer les noms différentes archives
     find . -name "*.archive.txt" -d 1 -exec echo "{}" >> find.txt \;
-    # Afficher le nombre d'archives et le tableau avec le nom des archives
     local length=$(wcl find.txt)
     echo "$(((length+1)))"
     echo "Il y a $length archives."
@@ -244,6 +243,8 @@ function commande-browse () {
 }
 
 function commande-browse-ls () {
+    #2
+    #3
     archive=$2
     currentDir=$3
     archiveFile="./$archive.archive.txt"
@@ -292,38 +293,62 @@ function commande-browse-cd () {
 }
 
 function commande-browse-cat () {
+    #1
     archive=$2
     currentDir=$3
-    file=$4
     archiveFile="./$archive.archive.txt"
+    local files
+    local absoluteFilesArr=()
+    local infoFilesArr=()
+    local fileNumber=0
+    # On vérifie que les fichiers ne remontent pas au dessus de \ et on remplie les tableaux absoluteFilesArr et infoFilesArr
+    while [[ -n "$4" ]]
+    do
+        ((fileNumber++))
+        local file=$4
+        file=$(formatAbsolutePath "$currentDir" "$file")
+        if [[ $? -eq 1 ]]
+        then
+            echo "1
+            Erreur : vous essayez de remonter au delà de la racine \\ >> $4"
+            exit 0
+        fi
+        absoluteFilesArr+=("$file")
+        local parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
+        local onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
+        local list=$(listInDirectory "$archiveFile" "$parentDir")
+        local line=$(echo "$list" | egrep "^$onlyFile -")
+        infoFilesArr+=("$line")
+        shift
+    done
 
-    # ici, il faut renvoyer le chemin absolu du nouveau répertoire de travail avec des / comme séparateur de dossier
-    # chemin absolu = chemin relatif à la racine de l'archive
-    local file=$(formatAbsolutePath "$currentDir" "$file")
-    if [[ $? -eq 1 ]]
-    then
-        echo "1
-        Erreur : vous essayez de remonter au delà de la racine \\"
-        exit 0
-    fi
-    local parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
-    local onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
-    local list=$(listInDirectory "$archiveFile" "$parentDir")
-    local line=$(echo "$list" | egrep "^$onlyFile -")
-    read name rights size begin lines <<< $line
-    if [[ -n "$size" ]]
-    then
-        local body=$(parseBody "$archiveFile")
-        echo $lines
-        echo "$body" | head -n $((begin+lines-1)) | tail -n $lines
-    elif [[ -n "$name" ]]
-    then
-        echo "1
-        Le fichier est vide."
-    else
-        echo "1
-        Erreur : le fichier n'existe pas."
-    fi
+    # On compte le nombre de lignes total et on vérifie que tous les fichiers existent
+    local i
+    local totalLines=0
+    for ((i = 0 ; i < $fileNumber ; i++))
+    do
+        local info="${infoFilesArr[$i]}"
+        if [[ -z "$info" ]]
+        then
+            echo "1
+            Erreur : le fichier n'existe pas >> ${absoluteFilesArr[$i]}"
+            exit 0
+        fi
+        read name rights size begin lines <<< $info
+        [[ -n "$lines" ]] && ((totalLines+=lines))
+    done
+    echo $totalLines
+
+    # On affiche les fichiers
+    for ((i = 0 ; i < $fileNumber ; i++))
+    do
+        read name rights size begin lines <<< ${infoFilesArr[$i]}
+        if [[ -n "$size" ]]
+        then
+            local body=$(parseBody "$archiveFile")
+            echo "$body" | head -n $((begin+lines-1)) | tail -n $lines
+        fi
+    done
 }
 
 function commande-browse-rm () {
