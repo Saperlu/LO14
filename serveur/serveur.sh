@@ -69,12 +69,20 @@ function wcl () {
 }
 
 function parseHeader () {
-    file="$1"
+    local archiveFile="$1"
     local line
-    read line < "$file"
+    read line < "$archiveFile"
     local beginHeader=$(echo $line | cut -d: -f1)
     local beginBody=$(echo $line | cut -d: -f2)
-    head -n $((beginBody-1)) "$file" | tail -n $((beginBody-beginHeader-1))
+    head -n $((beginBody-1)) "$archiveFile" | tail -n $((beginBody-beginHeader-1))
+}
+
+function parseBody () {
+    local archiveFile="$1"
+    local line
+    read line < "$archiveFile"
+    local beginBody=$(echo $line | cut -d: -f2)
+    tail -n $(($(wcl "$archiveFile")-beginBody)) "$archiveFile"
 }
 
 function listInDirectory () {
@@ -95,19 +103,19 @@ function formatAbsolutePath () {
     # Formatage du destDir
     if [[ ! "$destDir" =~ ^\\ ]]
     then # Conversion de relatif vers absolu
-        destDir=$(printf %s\\\\%s "$currentDir" "$destDir")
+        destDir=$(printf %s\\%s "$currentDir" "$destDir")
     fi
-    destDir=$(echo "$destDir" | sed -r 's/\\+/\\\\/g')
+    destDir=$(echo "$destDir" | sed -r 's/\\+/\\/g')
     ## On remplace les \\.. par \\;
-    while [[ $(echo "$destDir" | egrep '\\\\\.\.(\\\\.*)?$') ]]
+    while [[ $(echo "$destDir" | egrep '\\\.\.(\\.*)?$') ]]
     do
-        destDir=$(echo "$destDir" | sed -r 's/\\\\\.\.(\\\\.*)?$/\\\\;\1/g')
+        destDir=$(echo "$destDir" | sed -r 's/\\\.\.(\\.*)?$/\\;\1/g')
     done
     while [[ "$destDir" =~ \; ]]
     do
-        destDir=$(echo "$destDir" | sed -r 's/\\\\[^\\;]+\\\\;/\\\\/')
-        destDir=$(echo "$destDir" | sed -r 's/\\+/\\\\/g')
-        if [[ "$destDir" =~ ^\\\\\; ]]
+        destDir=$(echo "$destDir" | sed -r 's/\\[^\\;]+\\;/\\/')
+        destDir=$(echo "$destDir" | sed -r 's/\\+/\\/g')
+        if [[ "$destDir" =~ ^\\\; ]]
         then
             return 1 # Erreur
         fi
@@ -221,8 +229,8 @@ function commande-create () {
 
 function commande-browse () {
     if [ "$(type -t $fun-$1)" = "function" ]; then
-        fichier="./$2.archive.txt"
-        if [[ -e "$fichier" ]]
+        archiveFile="./$2.archive.txt"
+        if [[ -e "$archiveFile" ]]
         then
             $fun-$1 $args
         else
@@ -238,8 +246,9 @@ function commande-browse () {
 function commande-browse-ls () {
     archive=$2
     currentDir=$3
-    fichier="./$archive.archive.txt"
-    local list=$(listInDirectory "$fichier" "$currentDir")
+    archiveFile="./$archive.archive.txt"
+    local currentDir=$(echo "$currentDir" | sed -r 's/^(.*[^\\]+)\\*$/\1\\/')
+    local list=$(listInDirectory "$archiveFile" "$currentDir")
     local length=$(echo "$list" | wc -l | egrep -o [0-9]+)
     if [[  $length -eq 0 ]]
     then
@@ -255,7 +264,7 @@ function commande-browse-cd () {
     archive=$2
     currentDir=$3
     destDir=$4
-    fichier="./$archive.archive.txt"
+    archiveFile="./$archive.archive.txt"
 
     # ici, il faut renvoyer le chemin absolu du nouveau répertoire de travail avec des / comme séparateur de dossier
     # chemin absolu = chemin relatif à la racine de l'archive
@@ -266,14 +275,14 @@ function commande-browse-cd () {
         Erreur : vous essayez de remonter au delà de la racine \\"
         exit 0
     fi
-    if [[ "$destDir" != "\\\\" ]]
+    if [[ "$destDir" != "\\" ]]
     then
-        local parentDir=$(echo "$destDir" | sed -r 's/^(.*\\\\)[^\\]+(\\\\)?$/\1/g' | sed -r 's/\\\\/\\/g')
-        local lastDir=$(echo "$destDir" | sed -r 's/\\\\([^\\]+)(\\\\)?$/\1/g')
-        local list=$(listInDirectory "$fichier" "$parentDir")
+        local parentDir=$(echo "$destDir" | sed -r 's/^(.*\\)[^\\]+(\\)?$/\1/g')
+        local lastDir=$(echo "$destDir" | sed -r 's/\\([^\\]+)(\\)?$/\1/g')
+        local list=$(listInDirectory "$archiveFile" "$parentDir")
         if [[ ! $(echo "$list" | egrep "^$lastDir d") ]]
         then
-            echo "$(echo "$list" | wc -l)
+            echo "1
             Erreur : le dossier n'existe pas."
         fi
     fi
@@ -281,12 +290,40 @@ function commande-browse-cd () {
     $destDir"
     
 }
+
 function commande-browse-cat () {
     archive=$2
     currentDir=$3
-    fichier=$4
-    echo "1
-            contenu du fichier"
+    file=$4
+    archiveFile="./$archive.archive.txt"
+
+    # ici, il faut renvoyer le chemin absolu du nouveau répertoire de travail avec des / comme séparateur de dossier
+    # chemin absolu = chemin relatif à la racine de l'archive
+    local file=$(formatAbsolutePath "$currentDir" "$file")
+    if [[ $? -eq 1 ]]
+    then
+        echo "1
+        Erreur : vous essayez de remonter au delà de la racine \\"
+        exit 0
+    fi
+    local parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
+    local onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
+    local list=$(listInDirectory "$archiveFile" "$parentDir")
+    local line=$(echo "$list" | egrep "^$onlyFile -")
+    read name rights size begin lines <<< $line
+    if [[ -n "$size" ]]
+    then
+        local body=$(parseBody "$archiveFile")
+        echo $lines
+        echo "$body" | head -n $((begin+lines-1)) | tail -n $lines
+    elif [[ -n "$name" ]]
+    then
+        echo "1
+        Le fichier est vide."
+    else
+        echo "1
+        Erreur : le fichier n'existe pas."
+    fi
 }
 
 function commande-browse-rm () {

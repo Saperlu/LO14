@@ -22,7 +22,7 @@ function printResult () {
             then
                 n=$line
             else
-                echo -e "$line"
+                printf "%s\n" "$line"
             fi
             if [[ $i -eq $n ]]
             then
