@@ -108,9 +108,14 @@ function formatAbsolutePath () {
     then # Conversion de relatif vers absolu
         destDir=$(printf %s\\%s "$currentDir" "$destDir")
     fi
-    destDir=$(echo "$destDir" | sed -r 's/\\+/\\/g')
+    destDir=$(echo "$destDir" | \
+        sed -r 's/\\+/\\/g' | \
+        sed -r 's/^\.\\/\\/g' | \
+        sed -r 's/\\\.\\/\\/g' | \
+        sed -r 's/\\\.$/\\/g' \
+    )
     ## On remplace les \\.. par \\;
-    while [[ $(echo "$destDir" | egrep '\\\.\.(\\.*)?$') ]]
+    while [[ $(echo "$destDir" | grep -E '\\\.\.(\\.*)?$') ]]
     do
         destDir=$(echo "$destDir" | sed -r 's/\\\.\.(\\.*)?$/\\;\1/g')
     done
@@ -192,7 +197,6 @@ function commande-create () {
 
     taille_header=$(wcl header.txt)
     #Ajouter au début du fichier header
-    # sed -i 1s/.*/`((taille_header+2))`\n/g "header.txt"
     echo "3:$(((taille_header+2)))" | cat - header.txt > temp 
     mv temp header.txt
 
@@ -225,38 +229,59 @@ function commande-browse () {
 }
 
 function commande-browse-ls () {
-    #2
-    #3
-    local archive
-    local currentDir
-    local archiveFile
-    local list
-    archive=$2
-    currentDir=$3
+    # Arguments
+    local archive currentDir destDir options
+    archive="$2"
+    currentDir="$3"
+    destDir="$4"
+    options="$5"
+    local list archiveFile name right
+
     archiveFile="./$archive.archive.txt"
-    currentDir=$(echo "$currentDir" | sed -r 's/^(.*[^\\]+)\\*$/\1\\/')
+    currentDir=$(formatAbsolutePath "$currentDir" "$destDir" | sed -r 's/^(.*[^\\]+)\\*$/\1\\/')
     list=$(listInDirectory "$archiveFile" "$currentDir")
+
+    if [[ ! "$options" =~ "a" ]]
+    then
+        list=$(echo "$list" | sed -r '/^\./d')
+    fi
     local length
     length=$(echo "$list" | wc -l | grep -E -o "[0-9]+")
-    if [[  $length -eq 0 ]]
+    if [[ "$options" =~ "l" ]]
     then
-        echo "1
-        Le dossier est vide $length"
-    else
         echo "$length"
-        echo "$list" | sed -r 's/(^.*) ([dlrwx-]+) ([0-9]*)( [0-9]+ [0-9]+)?$/\2 \1 \3/g'
+        echo "$list" | sed -r -e 's/(^.*) ([dlrwx-]+) ([0-9]*)( [0-9]+ [0-9]+)?$/\2 \1 \3/g'  -e 's/(^.*) ([dlrwx-]+)$/\2 \1/g'
+    else
+        echo "1"
+        echo "$list" | while read -r line
+        do
+            read -r name right _ <<< $line
+            printf "%s" "$name"
+            if [[ "$right" =~ ^d ]]
+            then 
+                printf "\\"
+            elif [[ "$right" =~ ^...x ]]
+            then
+                printf "*"
+            fi
+            printf " "
+        done
+        printf "\n"
     fi
+
+
 }
 
 function commande-browse-cd () {
+    local archive currentDir destDir
     archive=$2
     currentDir=$3
     destDir=$4
+    local archiveFile
     archiveFile="./$archive.archive.txt"
 
     # ici, il faut renvoyer le chemin absolu du nouveau répertoire de travail avec des / comme séparateur de dossier
     # chemin absolu = chemin relatif à la racine de l'archive
-    local destDir
     destDir=$(formatAbsolutePath "$currentDir" "$destDir")
     if [[ $? -eq 1 ]]
     then

@@ -75,11 +75,28 @@ function create () {
 }
 
 function browse-ls () {
+    local serveur port archive currentDir destDir
+
     serveur=$1
     port=$2
     archive=$3
     currentDir=$4
-    echo "browse ls $archive $currentDir" | netcat "$serveur" "$port" > "$FIFO" &
+
+    local opt opt_detailled opt_all
+    shift 4
+    while [[ "$1" =~ ^- ]]
+    do 
+        [[ "$1" =~ a ]] && opt_all=1
+        [[ "$1" =~ l ]] && opt_detailled=1
+        shift
+    done
+    opt="-"
+    [[ $opt_detailled == 1 ]] && opt+=l
+    [[ $opt_all == 1 ]] && opt+=a
+    destDir="$1"
+    [[ -z "$destDir" ]] && destDir="."
+
+    echo "browse ls $archive $currentDir $destDir $opt" | netcat "$serveur" "$port" > "$FIFO" &
     printResult | while read -r line
     do
         read -r rights name size <<< "$line"
@@ -249,7 +266,7 @@ then # browse
     regexFichier="[[:alnum:]\\-_.]+"
 
     # Vérifie que l'archive existe
-    if [[ ! $(list $serveur $port 2>/dev/null | grep -E ^$archive$ ) ]]
+    if [[ ! $(list $serveur $port 2>/dev/null | egrep ^$archive$) ]]
     then
         echo "Erreur : l'archive n'existe pas"
         exit 0
@@ -262,25 +279,26 @@ then # browse
         if [[ $line == "pwd" ]]
         then
             echo $currentDir
-        elif [[ $line == "ls" ]]
+        elif [[ $line =~ ^ls(\ -[la]+)*(\ $regexFichier)?$ ]]
         then
-            browse-ls "$2" "$3" "$4" "$currentDir" 2>/dev/null
+            options=$(echo "$line" | sed -r 's/^ls ?//g')
+            browse-ls "$2" "$3" "$4" "$currentDir" $options 2>/dev/null
         elif [[ $line =~ ^cd\ $regexFichier$ ]]
         then
-            dossier="$(echo "$line" | sed 's/cd //g')"
+            dossier="$(echo "$line" | sed 's/^cd //g')"
             browse-cd "$2" "$3" "$4" "$currentDir" "$dossier" 2>/dev/null
 
         elif [[ $line =~ ^cat(\ $regexFichier)+$ ]]
         then
-            fichiers=$(echo "$line" | sed 's/cat //g')
+            fichiers=$(echo "$line" | sed 's/^cat //g')
             browse-cat "$2" "$3" "$4" "$currentDir" "$fichiers" 2>/dev/null
         elif [[ $line =~ ^rm\ $regexFichier$ ]]
         then
-            fichier=$(echo "$line" | sed 's/rm //g')
+            fichier=$(echo "$line" | sed 's/^rm //g')
             browse-rm "$2" "$3" "$4" "$currentDir" "$fichier" 2>/dev/null
         elif [[ $line =~ ^touch\ $regexFichier$ ]]
         then
-            fichier=$(echo "$line" | sed 's/touch //g')
+            fichier=$(echo "$line" | sed 's/^touch //g')
             browse-touch "$2" "$3" "$4" "$currentDir" "$fichier" 2>/dev/null
         elif [[ $line =~ ^mkdir\ $regexFichier$ ]]
         then
@@ -288,7 +306,7 @@ then # browse
             browse-mkdir "$2" "$3" "$4" "$currentDir" "$dossier" 2>/dev/null
         else
             # prints correct usage
-            printf "Usage :\n\tpwd\n\tls\n\tcd dossier\n\tcat fichier\n\trm fichier\n\ttouch fichier\n\tmkdir dossier\n"
+            printf "Usage :\n\tpwd\n\tls[ -la][ dossier]\n\tcd dossier\n\tcat fichier[ autres_fichiers]\n\trm fichier\n\ttouch fichier\n\tmkdir dossier\n"
         fi
         printf "vsh: %s < $__colorRed%s$__colorEnd > " "$archive" "$currentDir"
         read -r line
