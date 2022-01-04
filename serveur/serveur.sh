@@ -158,56 +158,7 @@ function commande-list () {
 function commande-create () {
     nom=$1
     archive=$2
-    dossier="/tmp/dossier-$USER-$$-$nom"
-    mkdir "$dossier"
-    echo $archive | base64 -d | tar -xz -C "$dossier"
-    # Tout se trouve dans le dossier $dossier
-    local toprint
-
-    #Deux fichiers qu'on va concaténer à la fin
-    touch header.txt
-    touch body.txt
-
-    #On laisse une ligne en haut pour noter le début du header et du body
-    echo -e "\n" >> header.txt
-
-    # On recherche tous les dossiers de l'arborescence pour lister leur contenu
-    find "$dossier" -type d | while read -r absolute
-    do
-        relative=$(printf "%s" "$absolute" | sed "s:^$dossier::")
-        [[ "$relative" == '' ]] && relative="\\" # For root directory
-        echo "directory $relative\\" >> "header.txt"
-        # On boucle sur le contenu du dossier pour afficher les informations de chaque fichier/dossier
-        ls -l "$absolute" | sed /^total/d | while read -r rights _ _ _ size _ _ _ name
-        do
-            toprint="$name $rights"
-            if [[ "$size" != "0" ]]
-            then
-                toprint="$toprint $size"
-                if [[ -f "$absolute/$name" ]]
-                then
-                    toprint="$toprint $((($(wcl body.txt)+1))) $(wcl $absolute/$name)"
-                    cat "$absolute/$name" >> body.txt
-                fi
-            fi
-            echo "$toprint"
-        done >> header.txt
-        echo "@" >> header.txt
-    done
-
-    taille_header=$(wcl header.txt)
-    #Ajouter au début du fichier header
-    echo "3:$(((taille_header+2)))" | cat - header.txt > temp 
-    mv temp header.txt
-
-    #Concaténer header et body
-    sed -i '' 's/\//\\/g' header.txt
-    cat header.txt body.txt > "$nom.archive.txt"
-    rm body.txt
-    rm header.txt
-
-
-    rm -rf "$dossier"
+    echo $archive | base64 -d > "$nom.archive.txt"
     echo "1
             L'archive $nom a bien été créée"
 }

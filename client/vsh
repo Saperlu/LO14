@@ -37,6 +37,10 @@ function printResult () {
     done
 }
 
+function wcl () {
+    wc -l "$1" | grep -E -o '[0-9]+' | head -n 1
+}
+
 function list () {
     serveur=$1
     port=$2
@@ -46,32 +50,64 @@ function list () {
 }
 
 function create () {
-    zip=$(tar -cz ./* | base64)
     serveur=$1
     port=$2
     archive=$3
-    echo "create $archive $zip" | netcat "$serveur" "$port" > "$FIFO" &
-    i=0
-    while :
-    do
-        while read -r line
-        do
-            if [[ $i -eq 0 ]]
-            then
-                n=$line
-            elif [[ -n $line ]]
-            then
-                echo -e "$line"
-            fi
+    local header body dossier relative absolute temp
+    header="/tmp/header-$USER-$$-$archive"
+    body="/tmp/body-$USER-$$-$archive"
+    temp="/tmp/temp-$USER-$$-$archive"
+    dossier="$(pwd)"
+    
+    local toprint
 
-            if [[ $i -eq $n ]]
+    #Deux fichiers qu'on va concaténer à la fin
+    touch "$header.txt"
+    touch "$body.txt"
+
+    #On laisse une ligne en haut pour noter le début du header et du body
+    echo -e "\n" >> "$header.txt"
+
+    # On recherche tous les dossiers de l'arborescence pour lister leur contenu
+    find ./ -type d | while read -r absolute
+    do
+        relative=$(printf "%s" "$absolute" | sed "s:^\\./::")
+        echo "directory $relative\\" >> "$header.txt"
+        # On boucle sur le contenu du dossier pour afficher les informations de chaque fichier/dossier
+        ls -l "$absolute" | sed /^total/d | while read -r rights _ _ _ size _ _ _ name
+        do
+            toprint="$name $rights"
+            if [[ "$size" != "0" ]]
             then
-                kill $!
-                exit 0
+                toprint="$toprint $size"
+                if [[ -f "$absolute/$name" ]]
+                then
+                    toprint="$toprint $((($(wcl "$body.txt")+1))) $(wcl $absolute/$name)"
+                    cat "$absolute/$name" >> "$body.txt"
+                fi
             fi
-            ((i++))
-        done < "$FIFO"
+            echo "$toprint"
+        done >> "$header.txt"
+        echo "@" >> "$header.txt"
     done
+    taille_header=$(wcl "$header.txt")
+    #Ajouter au début du fichier header
+
+    echo "3:$(((taille_header+2)))" | cat - "$header.txt" > "$temp" 
+    mv "$temp" "$header.txt"
+
+    #Concaténer header et body
+    sed -i '' 's/\//\\/g' "$header.txt"
+    cat "$header.txt" "$body.txt" > "$temp"
+    rm "$body.txt"
+    rm "$header.txt"
+
+    local archiveContent
+    archiveContent=$(base64 $temp)
+    echo $archiveContent
+    echo "create $archive $archiveContent" | netcat "$serveur" "$port" > "$FIFO" &
+    rm "$temp"
+    printResult
 }
 
 function browse-ls () {
