@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /usr/local/bin/bash
 
 # Ce script implémente un serveur.
 # Le script doit être invoqué avec l'argument :
@@ -6,7 +6,7 @@
 
 if [ $# -ne 1 ]; then
     echo "usage: $(basename $0) PORT"
-    exit -1
+    exit 0
 fi
 
 PORT="$1"
@@ -51,7 +51,7 @@ function accept-loop() {
 function interaction() {
     local cmd args
     while true; do
-        read -r cmd args || exit -1
+        read -r cmd args || exit 0
         echo "$cmd $args" > "$logger" &
         fun="commande-$cmd"
         if [ "$(type -t $fun)" = "function" ]; then
@@ -65,30 +65,33 @@ function interaction() {
 # Les fonctions implémentant les différentes commandes du serveur
 
 function wcl () {
-    wc -l "$1" | egrep -o '[0-9]+' | head -n 1
+    wc -l "$1" | grep -E -o '[0-9]+' | head -n 1
 }
 
 function parseHeader () {
     local archiveFile="$1"
     local line
-    read line < "$archiveFile"
-    local beginHeader=$(echo $line | cut -d: -f1)
-    local beginBody=$(echo $line | cut -d: -f2)
+    read -r line < "$archiveFile"
+    local beginHeader
+    beginHeader=$(echo "$line" | cut -d: -f1)
+    local beginBody
+    beginBody=$(echo "$line" | cut -d: -f2)
     head -n $((beginBody-1)) "$archiveFile" | tail -n $((beginBody-beginHeader-1))
 }
 
 function parseBody () {
     local archiveFile="$1"
     local line
-    read line < "$archiveFile"
-    local beginBody=$(echo $line | cut -d: -f2)
+    read -r line < "$archiveFile"
+    local beginBody
+    beginBody=$(echo "$line" | cut -d: -f2)
     tail -n $(($(wcl "$archiveFile")-beginBody)) "$archiveFile"
 }
 
 function listInDirectory () {
     local archiveFile="$1"
     local currentDir="$2"
-    parseHeader $archiveFile | awk "
+    parseHeader "$archiveFile" | awk "
     BEGIN {state=0}
     state==1 {state=2}
     /^directory $(echo "$currentDir" | sed -r s/\\\\/\\\\\\\\/g)$/ {state=1}
@@ -138,8 +141,9 @@ function commande-echo () {
 function commande-list () {
     # Le nombre d'archives suivi des noms des archives
     # Récupérer les noms différentes archives
-    find . -name "*.archive.txt" -maxdepth 1 -exec echo "{}" >> find.txt \;
-    local length=$(wcl find.txt)
+    find . -name "*.archive.txt" -maxdepth 1 -exec echo "{}" >> "find.txt" \;
+    local length
+    length=$(wcl find.txt)
     echo "$(((length+1)))"
     echo "Il y a $length archives."
     sed "s:./\(.*\).archive.txt$:\1:g" find.txt
@@ -153,7 +157,7 @@ function commande-create () {
     mkdir "$dossier"
     echo $archive | base64 -d | tar -xz -C "$dossier"
     # Tout se trouve dans le dossier $dossier
-
+    local toprint
 
     #Deux fichiers qu'on va concaténer à la fin
     touch header.txt
@@ -161,52 +165,30 @@ function commande-create () {
 
     #On laisse une ligne en haut pour noter le début du header et du body
     echo -e "\n" >> header.txt
-    curseur_body=0
 
     # On recherche tous les dossiers de l'arborescence pour lister leur contenu
-    find "$dossier" -type d | while read absolute
+    find "$dossier" -type d | while read -r absolute
     do
-        relative=$(printf "%s" $absolute | sed s:^$dossier::)
+        relative=$(printf "%s" "$absolute" | sed "s:^$dossier::")
         [[ "$relative" == '' ]] && relative="\\" # For root directory
-        echo "directory $relative\\" >> header.txt
+        echo "directory $relative\\" >> "header.txt"
         # On boucle sur le contenu du dossier pour afficher les informations de chaque fichier/dossier
-        ls -l "$absolute" | sed /^total/d | while read rights _ _ _ size _ _ _ name
+        ls -l "$absolute" | sed /^total/d | while read -r rights _ _ _ size _ _ _ name
         do
-            export toprint="$name $rights"
+            toprint="$name $rights"
             if [[ "$size" != "0" ]]
             then
-                export toprint="$toprint $size"
+                toprint="$toprint $size"
                 if [[ -f "$absolute/$name" ]]
                 then
-                    export toprint="$toprint $((($(wcl body.txt)+1))) $(wcl $absolute/$name)"
+                    toprint="$toprint $((($(wcl body.txt)+1))) $(wcl $absolute/$name)"
                     cat "$absolute/$name" >> body.txt
                 fi
             fi
-            echo $toprint
+            echo "$toprint"
         done >> header.txt
         echo "@" >> header.txt
     done
-
-    #On cherche les directory
-    # for i in $(ls)
-    # do
-    #   if [ -d $i ]; then
-    #     ((d++))
-    #     #Mettre le nom du dossier dans le fichiers
-    #     echo -e "directory $(ls)\n" >> header.txt
-    #     nb_lignes=$(wc -l $(ls))
-    #     #Ecrire ce qu'il y a dans le fichier dans l'archive
-    #     #cat body.txt ($(ls)).txt > body.txt
-    #     taille=$(ls -l $i | cut -d' ' -f5)
-    #     echo -e "\n\n" >> body.txt
-    #     #Mettre les dossiers et fichiers en-dessous avec nom, droit, poids et début et fin
-    #     echo -e "$(ls -a) $(ls -l) $taille $curseur_body (($curseur_body+$nb_lignes))" >> header.txt
-    #     (($nb_lignes+=1))
-    #     (($curseur_body+=$nb_lignes))
-    #   fi
-    #   #Mettre un @ pour dire qu'on change de dossier
-    #   echo -e "@\n" >> header.txt
-    # done
 
     taille_header=$(wcl header.txt)
     #Ajouter au début du fichier header
@@ -216,7 +198,7 @@ function commande-create () {
 
     #Concaténer header et body
     sed -i '' 's/\//\\/g' header.txt
-    cat header.txt body.txt > $nom.archive.txt
+    cat header.txt body.txt > "$nom.archive.txt"
     rm body.txt
     rm header.txt
 
@@ -245,18 +227,23 @@ function commande-browse () {
 function commande-browse-ls () {
     #2
     #3
+    local archive
+    local currentDir
+    local archiveFile
+    local list
     archive=$2
     currentDir=$3
     archiveFile="./$archive.archive.txt"
-    local currentDir=$(echo "$currentDir" | sed -r 's/^(.*[^\\]+)\\*$/\1\\/')
-    local list=$(listInDirectory "$archiveFile" "$currentDir")
-    local length=$(echo "$list" | wc -l | egrep -o [0-9]+)
+    currentDir=$(echo "$currentDir" | sed -r 's/^(.*[^\\]+)\\*$/\1\\/')
+    list=$(listInDirectory "$archiveFile" "$currentDir")
+    local length
+    length=$(echo "$list" | wc -l | grep -E -o "[0-9]+")
     if [[  $length -eq 0 ]]
     then
         echo "1
         Le dossier est vide $length"
     else
-        echo $length
+        echo "$length"
         echo "$list" | sed -r 's/(^.*) ([dlrwx-]+) ([0-9]*)( [0-9]+ [0-9]+)?$/\2 \1 \3/g'
     fi
 }
@@ -269,7 +256,8 @@ function commande-browse-cd () {
 
     # ici, il faut renvoyer le chemin absolu du nouveau répertoire de travail avec des / comme séparateur de dossier
     # chemin absolu = chemin relatif à la racine de l'archive
-    local destDir=$(formatAbsolutePath "$currentDir" "$destDir")
+    local destDir
+    destDir=$(formatAbsolutePath "$currentDir" "$destDir")
     if [[ $? -eq 1 ]]
     then
         echo "1
@@ -278,10 +266,13 @@ function commande-browse-cd () {
     fi
     if [[ "$destDir" != "\\" ]]
     then
-        local parentDir=$(echo "$destDir" | sed -r 's/^(.*\\)[^\\]+(\\)?$/\1/g')
-        local lastDir=$(echo "$destDir" | sed -r 's/\\([^\\]+)(\\)?$/\1/g')
-        local list=$(listInDirectory "$archiveFile" "$parentDir")
-        if [[ ! $(echo "$list" | egrep "^$lastDir d") ]]
+        local parentDir
+        parentDir=$(echo "$destDir" | sed -r 's/^(.*\\)[^\\]+(\\)?$/\1/g')
+        local lastDir
+        lastDir=$(echo "$destDir" | sed -r 's/\\([^\\]+)(\\)?$/\1/g')
+        local list
+        list=$(listInDirectory "$archiveFile" "$parentDir")
+        if [[ ! $(echo "$list" | grep -E "^$lastDir d") ]]
         then
             echo "1
             Erreur : le dossier n'existe pas."
@@ -297,7 +288,6 @@ function commande-browse-cat () {
     archive=$2
     currentDir=$3
     archiveFile="./$archive.archive.txt"
-    local files
     local absoluteFilesArr=()
     local infoFilesArr=()
     local fileNumber=0
@@ -314,10 +304,14 @@ function commande-browse-cat () {
             exit 0
         fi
         absoluteFilesArr+=("$file")
-        local parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
-        local onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
-        local list=$(listInDirectory "$archiveFile" "$parentDir")
-        local line=$(echo "$list" | egrep "^$onlyFile -")
+        local parentDir
+        parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
+        local onlyFile
+        onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
+        local list
+        list=$(listInDirectory "$archiveFile" "$parentDir")
+        local line
+        line=$(echo "$list" | grep -E "^$onlyFile -")
         infoFilesArr+=("$line")
         shift
     done
@@ -334,7 +328,7 @@ function commande-browse-cat () {
             Erreur : le fichier < ${absoluteFilesArr[$i]} > n'existe pas."
             exit 0
         fi
-        read name rights size begin lines <<< $info
+        read -r name rights size begin lines <<< $info
         [[ -n "$lines" ]] && ((totalLines+=lines))
     done
     echo $totalLines
@@ -342,10 +336,11 @@ function commande-browse-cat () {
     # On affiche les fichiers
     for ((i = 0 ; i < $fileNumber ; i++))
     do
-        read name rights size begin lines <<< ${infoFilesArr[$i]}
+        read -r name rights size begin lines <<< ${infoFilesArr[$i]}
         if [[ -n "$size" ]]
         then
-            local body=$(parseBody "$archiveFile")
+            local body
+            body=$(parseBody "$archiveFile")
             echo "$body" | head -n $((begin+lines-1)) | tail -n $lines
         fi
     done
@@ -355,7 +350,6 @@ function commande-browse-rm () {
     local archive=$2
     local currentDir=$3
     local archiveFile="./$archive.archive.txt"
-    local files
     local absoluteFilesArr=()
     local infoFilesArr=()
     local fileNumber=0
@@ -377,11 +371,15 @@ function commande-browse-rm () {
         fi
 
         absoluteFilesArr+=("$file")
-        local parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
-        local onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
-        local list=$(listInDirectory "$archiveFile" "$parentDir")
+        local parentDir
+        parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
+        local onlyFile
+        onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
+        local list
+        list=$(listInDirectory "$archiveFile" "$parentDir")
 
-        local info=$(echo "$list" | egrep "^$onlyFile [dl-]")
+        local info
+        info=$(echo "$list" | grep -E "^$onlyFile [dl-]")
         
         # On vérifie que tous les fichiers existent
         if [[ -z "$info" ]]
@@ -396,12 +394,17 @@ function commande-browse-rm () {
     done
 
     function deleteFile () {
+        if [[ $# != 3 ]]
+        then
+            exit 0
+        fi
         local archiveFile="$1"
         local file="$2"
         local info="$3"
-        local name right size begin lines
-        local parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
-        local onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
+        local parentDir
+        parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
+        local onlyFile
+        onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
         local line
 
         # Retire la ligne du header
@@ -411,69 +414,66 @@ function commande-browse-rm () {
             state==1 {state=2}
             state==0 && /^directory $(echo "$parentDir" | sed -r s/\\\\/\\\\\\\\/g)$/ {state=1}
             state==2 && /^@$/ {state=3}
-            state==2 && /^$onlyFile [dlrwx-]+( [0-9]*)*$/ {toprint=0}
+            state==2 && /^$onlyFile [dlrwx-]{10}.*$/ {toprint=0}
             toprint==1 {print}
             toprint==0 {toprint=1}
             " "$archiveFile")
         
         # Met à jour le début du body
-        read line <<< "$newContentArchive"
-        local beginHeader=$(echo $line | cut -d: -f1)
-        local beginBody=$(echo $line | cut -d: -f2)
+        read -r line <<< "$newContentArchive"
+        local beginHeader
+        beginHeader=$(echo "$line" | cut -d: -f1)
+        local beginBody
+        beginBody=$(echo "$line" | cut -d: -f2)
         ((beginBody--))
-        newContentArchive=$(echo "$newContentArchive" | sed -r "s/:.*/:$beginBody/g")
-        read name rights size begin lines <<< $info
+        newContentArchive=$(echo "$newContentArchive" | sed -r "s/:.*/:$beginBody/1")
+        local name right size begin lines
+        read -r name rights size begin lines <<< "$info"
         if [[ -n "$lines" ]]
         then
             # Retire le contenu du fichier du body
             # Met à jour les débuts de fichiers dans le header
-            echo "$newContentArchive" | awk "
+            newContentArchive=$(echo "$newContentArchive" | awk "
                 NR < $beginHeader {print}
                 NR >= $beginHeader && NR < $beginBody {
                     if(\$4 > $begin) \$4-=$lines; 
                     print
                 }
-                NR >= $beginBody && (NR < $beginBody+$begin || NR > $beginBody+$begin+$lines-1) {print}" > "$archiveFile"
+                NR >= $beginBody && (NR < $beginBody+$begin || NR > $beginBody+$begin+$lines-1) {print}")
         fi
+        echo "$newContentArchive" > "$archiveFile"
     }
     function deleteDir () {
         local archiveFile="$1"
-        local dir=$(echo "$2" | sed -r 's/(^.*[^\\])\\*$/\1\\/g')
+        local dir
+        dir=$(echo "$2" | sed -r 's/(^.*[^\\])\\*$/\1\\/g')
         local info="$3"
-        local list=$(listInDirectory "$archiveFile" "$dir")
-        echo "dir: $dir, list: $list"
-        local onlyDir=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
+        local list
+        list=$(listInDirectory "$archiveFile" "$dir")
         local line
-        read line < "$archiveFile"
-        local beginHeader=$(echo $line | cut -d: -f1)
-        local beginBody=$(echo $line | cut -d: -f2)
+        read -r line < "$archiveFile"
         local name
-        while read line 
+        unset line; local line
+        echo "$list" | while read -r line 
         # On supprime le contenu du dossier
         do
-            read name _ <<< "$line"
-            echo "line: $line"
-            echo "$dir > $name"
-            # if [[ "$right" =~ ^d ]]
-            # then # directory
-            #     deleteDir "$archiveFile" "$item" "$info"
-            # else # fichier
-            #     deleteFile "$archiveFile" "$item" "$info"
-            # fi
-            deleteItem "$archiveFile" "$dir$name" "$line"
-        done <<< "$list"
+            read -r name _ <<< "$line"
+            [[ -n "$name" ]] && deleteItem "$archiveFile" "$dir$name" "$line"
+        done
 
         # On supprime le dossier en lui même
-        local newContentArchive=$(cat "$archiveFile")
-        echo "$newContentArchive" | awk "
-            BEGIN {toprint=0}
-            toprint!=0 {toprint--}
-            NR < $beginHeader {print}
-            NR >= $beginHeader && NR < $beginBody && toprint==0 {print}
-            NR >= $beginHeader && NR < $beginBody && /^directory $onlyDir$/ {toprint=2}
-            NR >= $beginBody {print}" > "$archiveFile"
-
-
+        local newContentArchive
+        newContentArchive=$(cat "$archiveFile")
+        # On met le beginBody à jour
+        read -r line < "$archiveFile"
+        local beginBody
+        beginBody=$(echo "$line" | cut -d: -f2)
+        ((beginBody-=2))
+        newContentArchive=$(echo "$newContentArchive" | sed -r "s/:.*/:$beginBody/1")
+        #On supprime le dossier du header
+        echo "$newContentArchive" | sed "/^directory ${dir//\\/\\\\}$/,+1d" > "$archiveFile"
+        # On supprime le dossier du dossier parent
+        deleteFile "$archiveFile" "$dir" "$info"
 
     }
     function deleteItem () {
@@ -481,25 +481,22 @@ function commande-browse-rm () {
         local item="$2"
         local info="$3"
         local name right size begin lines
-        read name rights size begin lines <<< $info
-        if [[ "$rights" =~ ^d ]]
+        read -r name right size begin lines <<< "$info"
+        if [[ "$right" =~ ^d ]]
         then # directory
-            echo "deleting $item as dir"
             deleteDir "$archiveFile" "$item" "$info"
         else # fichier
-            echo "deleting $item as file"
             deleteFile "$archiveFile" "$item" "$info"
         fi
-        # echo "1
-        # Les suppressions ont été effectuées."
     }
 
     # On affiche les fichiers
-    for ((i = 0 ; i < $fileNumber ; i++))
+    for ((i = 0 ; i < "$fileNumber" ; i++))
     do
         deleteItem "$archiveFile" "${absoluteFilesArr[$i]}" "${infoFilesArr[$i]}"
     done
-    echo "DEBUGEND"
+    echo "1
+    Les suppressions ont été effectuées."
 }
 
 function commande-browse-touch () {
@@ -527,7 +524,7 @@ function commande-extract () {
         Erreur : l'archive n'existe pas"
         exit 0
     fi
-    echo $(wcl "$fichier")
+    wcl "$fichier"
     cat "$fichier"
 }
 

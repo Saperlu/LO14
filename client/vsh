@@ -80,9 +80,9 @@ function browse-ls () {
     archive=$3
     currentDir=$4
     echo "browse ls $archive $currentDir" | netcat "$serveur" "$port" > "$FIFO" &
-    printResult | while read line
+    printResult | while read -r line
     do
-        read rights name size <<< "$line"
+        read -r rights name size <<< "$line"
         if [[ "$rights" =~ ^d ]]
         then
             printf "%s $__colorRed%s$__colorEnd %s\n" "$rights" "$name" "$size"
@@ -100,7 +100,8 @@ function browse-cd () {
     destDir=$5
     
     echo "browse cd $archive $currentDir $destDir" | netcat "$serveur" "$port" > "$FIFO" &
-    local result=$(printResult)
+    local result
+    result=$(printResult)
     if [[ "$result" =~ ^\\ ]]
     then
         currentDir="$result"
@@ -130,7 +131,7 @@ function browse-rm () {
     fichier=$5
     
     echo "browse rm $archive $currentDir $fichier" | netcat "$serveur" "$port" > "$FIFO" &
-    printResult --debug
+    printResult
 }
 
 function browse-touch () {
@@ -163,7 +164,7 @@ function extract () {
     file="archive.txt"
     printResult > "$file"
 
-    if [[ !($(head -n 1 "$file") =~ ^[0-9]+:[0-9]+$) ]]
+    if [[ ! ($(head -n 1 "$file") =~ ^[0-9]+:[0-9]+$) ]]
     then
         cat "$file"
         rm "$file"
@@ -179,7 +180,7 @@ function extract () {
 
     isInsideDirectory="false"
     directory=''
-    while read line
+    while read -r line
     do
         if [[ $isInsideDirectory == "false" && "$line" =~ ^directory ]]
         then
@@ -190,17 +191,17 @@ function extract () {
             if [[ ! -d "$absolute" ]]
             then
                 mkdir "$absolute"
-                chmod u=$(echo $rights | cut -c2-4 | sed s/-//g),g=$(echo $rights | cut -c5-7 | sed s/-//g),o=$(echo $rights | cut -c8-10 | sed s/-//g) "$absolute"
+                chmod u="$(echo $rights | cut -c2-4 | sed s/-//g)",g="$(echo $rights | cut -c5-7 | sed s/-//g)",o="$(echo $rights | cut -c8-10 | sed s/-//g)" "$absolute"
             fi
         elif [[ $isInsideDirectory == "true" && "$line" == "@" ]]
         then
             directory=''
             isInsideDirectory="false"
         else
-            read name rights size begin lines <<< $line
+            read -r name rights size begin lines <<< $line
             absolute="$PWD/$directory/$name"
             absolute=${absolute//"//"/"/"}
-            if [[ !($rights =~ ^d) ]]
+            if [[ ! ($rights =~ ^d) ]]
             then
                 touch "$absolute"
                 if [[ -n $size ]]
@@ -248,7 +249,7 @@ then # browse
     regexFichier="[[:alnum:]\\-_.]+"
 
     # Vérifie que l'archive existe
-    if [[ ! $(list $serveur $port 2>/dev/null | egrep ^$archive$ ) ]]
+    if [[ ! $(list $serveur $port 2>/dev/null | grep -E ^$archive$ ) ]]
     then
         echo "Erreur : l'archive n'existe pas"
         exit 0
@@ -266,7 +267,7 @@ then # browse
             browse-ls "$2" "$3" "$4" "$currentDir" 2>/dev/null
         elif [[ $line =~ ^cd\ $regexFichier$ ]]
         then
-            dossier=$(echo "$line" | sed 's/cd //g')
+            dossier="$(echo "$line" | sed 's/cd //g')"
             browse-cd "$2" "$3" "$4" "$currentDir" "$dossier" 2>/dev/null
 
         elif [[ $line =~ ^cat(\ $regexFichier)+$ ]]
