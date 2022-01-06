@@ -1,0 +1,27 @@
+3:19
+
+
+directory \
+a -rwxrw-r-- 21 1 3
+abc -rw-r--r--
+b -rw-rw-rw- 32 4 3
+da drwxr-xr-x 96
+dc drwxr-xr-x 64
+@
+directory \da\
+daa drwxr-xr-x 96
+@
+directory \da\daa\
+aaa -rw-r--r-- 25 7 3
+@
+directory \dc\
+@
+a début
+lorem
+a fin
+b début
+lorem ipsum de B
+b fin
+aaa début
+lorem
+aaa fin

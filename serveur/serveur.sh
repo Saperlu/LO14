@@ -99,6 +99,14 @@ function listInDirectory () {
     state==2 {print}"
 }
 
+function doesDirExist () {
+    local archiveFile="$1"
+    local currentDir="$2"
+
+    parseHeader "$archiveFile" | grep -E "^directory $currentDir$" > /dev/null
+}
+
+
 function formatAbsolutePath () {
     local currentDir="$1"
     local destDir="$2"
@@ -476,19 +484,122 @@ function commande-browse-rm () {
 }
 
 function commande-browse-touch () {
+    local archive currentDir file
     archive=$2
     currentDir=$3
-    fichier=$4
+    file=$4
+    local archiveFile parentDir onlyFile list info
+    archiveFile="$archive.archive.txt"
+
+    file=$(formatAbsolutePath "$currentDir" "$4")
+    # On vérifie que les fichiers ne remontent pas au dessus de \ 
+    if [[ $? -eq 1 ]]
+    then
+        echo "1
+        Erreur : vous essayez de remonter au delà de la racine \\ >> $4"
+        exit 0
+    fi
+
+    # On vérifie que tous les fichiers existent
+    parentDir=$(echo "$file" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
+    onlyFile=$(echo "$file" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
+    list=$(listInDirectory "$archiveFile" "$parentDir")
+    info=$(echo "$list" | grep -E "^$onlyFile [dl-]")
+    if [[ -n "$info" ]]
+    then
+        echo "1
+        Erreur : le fichier ou le dossier < $file > existe déjà."
+        exit 0
+    fi
+
+    read -r line < "$archiveFile"
+    local beginBody
+    beginBody=$(echo "$line" | cut -d: -f2)
+    ((beginBody++))
+    sed -r -i '' "s/:.*/:$beginBody/1" "$archiveFile"
+    echo "parent: $parentDir"
+    sed -r -i '' "/^directory ${parentDir//\\/\\\\}$/a\\
+$onlyFile -rw-r--r--
+" "$archiveFile"
     echo "1
-            $2> $3 $4"
+            Le fichier < $file > a été créé."
 }
 
 function commande-browse-mkdir () {
+    local archive currentDir destDir options
     archive=$2
     currentDir=$3
-    dossier=$4
+    destDir=$4
+    options=$5
+    local archiveFile parentDir onlyDir list info
+    archiveFile="$archive.archive.txt"
+
+    destDir=$(formatAbsolutePath "$currentDir" "$4")
+    # On vérifie que les fichiers ne remontent pas au dessus de \ 
+    if [[ $? -eq 1 ]]
+    then
+        echo "1
+        Erreur : vous essayez de remonter au delà de la racine \\ >> $4"
+        exit 0
+    fi
+
+    # On vérifie que tous les fichiers existent
+    parentDir=$(echo "$destDir" | sed -r 's/^(.*\\)[^\\]+(\\)*$/\1/g' | sed -r 's/\\+/\\/g')
+    onlyDir=$(echo "$destDir" | sed -r 's/^.*\\([^\\]+)(\\)*$/\1/g')
+    list=$(listInDirectory "$archiveFile" "$parentDir")
+    info=$(echo "$list" | grep -E "^$onlyDir [dl-]")
+    if [[ -n "$info" ]]
+    then
+        echo "1
+        Erreur : le fichier ou le dossier < $destDir > existe déjà."
+        exit 0
+    fi
+
+    function commande-browse-mkdir-item () {
+        local archiveFile parentDir dirName
+        archiveFile="$1"
+        parentDir="$2"
+        dirName="$3"
+
+        read -r line < "$archiveFile"
+        local beginBody
+        local beginHeader
+        beginHeader=$(echo "$line" | cut -d: -f1)
+        beginBody=$(echo "$line" | cut -d: -f2)
+
+
+        sed -r -i '' "/^directory ${parentDir//\\/\\\\}$/a\\
+$dirName drw-r--r--
+" "$archiveFile"
+        sed -r -i '' "$((beginBody-1)) a\\
+directory ${parentDir//\\/\\\\}$dirName\\\\\\
+@
+" "$archiveFile"
+
+        # incrémentation du beginBody
+        ((beginBody+=3))
+        sed -r -i '' "s/:.*/:$beginBody/1" "$archiveFile"
+
+        echo "on essaie $archiveFile, $parentDir, $dirName"
+    }
+    
+    if [[ "$options" =~ r ]]
+    then # recursive
+        echo recursive $destDir
+    else # not recursive
+        echo not recursive $destDir
+        if [[ ! $(parseHeader "$archiveFile" | grep -E "^directory ${parentDir//\\/\\\\}$") ]]
+        then
+            echo "2
+            Le dossier < $parentDir > n'existe pas
+            Utilisez l'option < -r > pour créer de manière récursive."
+            exit 0
+        fi
+        commande-browse-mkdir-item "$archiveFile" "$parentDir" "$onlyDir"
+    fi
+
     echo "1
-            $2> $3 $4"
+            Le dossier < $destDir > a été créé."
 }
 
 function commande-extract () {
